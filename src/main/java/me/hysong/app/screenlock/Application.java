@@ -3,6 +3,8 @@ package me.hysong.app.screenlock;
 import javax.swing.*;
 import java.awt.*;
 import java.awt.event.KeyEvent;
+import java.io.File;
+import java.io.IOException;
 import java.util.Arrays;
 
 public class Application extends JFrame {
@@ -13,8 +15,10 @@ public class Application extends JFrame {
     private static final int TRYOUT_COUNT = 5;
 
     // Strings
-    private static final String PASSWORD_ERROR_MESSAGE = "비밀번호 오류: (%d/%d 회 오류)";
-    private static final String PASSWORD_LOCKED_MESSAGE = "입력 잠김 (1회 잠금 해제까지 %d 초 남음)";
+    private static String TITLE_LOCKED = "Locked";
+    private static String PASSWORD_ERROR_MESSAGE = "Password Error: (%d/%d tries)";
+    private static String PASSWORD_LOCKED_MESSAGE = "Input locked (%d seconds remaining for next trial)";
+    private static String END_MESSAGE = "Screen locked for %dh %dm %ds. Total %d times of failed unlock attempt.";
 
     // --- GUI Components ---
     private JPasswordField passwordField;
@@ -26,10 +30,12 @@ public class Application extends JFrame {
     private static int triedTime = 0;
     private static boolean timeoutTriggered = false;
 
+    private static File tmpFile;
+
     public Application() {
         startTime = System.currentTimeMillis();
         // --- 1. Basic Frame Setup ---
-        setTitle("Locked");
+        setTitle("Screen Lock");
         setDefaultCloseOperation(JFrame.DO_NOTHING_ON_CLOSE);
         setResizable(false);
         setUndecorated(true);
@@ -48,7 +54,7 @@ public class Application extends JFrame {
         gbc.insets = new Insets(20, 0, 20, 0);
 
         // --- 4. GUI Components ---
-        titleLabel = new JLabel("잠김");
+        titleLabel = new JLabel(TITLE_LOCKED);
         titleLabel.setFont(new Font("SansSerif", Font.BOLD, 72));
         titleLabel.setForeground(Color.WHITE);
         contentPane.add(titleLabel, gbc);
@@ -59,7 +65,7 @@ public class Application extends JFrame {
         passwordField.addActionListener(e -> checkPassword());
         contentPane.add(passwordField, gbc);
 
-        errorLabel = new JLabel("비밀번호 오류");
+        errorLabel = new JLabel(PASSWORD_ERROR_MESSAGE);
         errorLabel.setFont(new Font("SansSerif", Font.BOLD, 18));
         errorLabel.setForeground(Color.RED);
         errorLabel.setVisible(false);
@@ -80,7 +86,7 @@ public class Application extends JFrame {
             long endTime = System.currentTimeMillis();
             long[] timeElapsed = toHumanReadable(endTime - startTime);
             dispose();
-            JOptionPane.showMessageDialog(this, String.format("총 %d시간 %d분 %d초 동안 잠겨있었으며, 총 %d회의 실패한 잠금해제 시도가 있었습니다.", timeElapsed[0], timeElapsed[1], timeElapsed[2], triedTime));
+            JOptionPane.showMessageDialog(this, String.format(END_MESSAGE, timeElapsed[0], timeElapsed[1], timeElapsed[2], triedTime));
             System.exit(0);
         } else {
             errorLabel.setVisible(true);
@@ -156,7 +162,7 @@ public class Application extends JFrame {
         }).start();
     }
 
-    public static void main(String[] args) {
+    public static void main(String[] args) throws IOException {
         try {
             UIManager.setLookAndFeel(UIManager.getSystemLookAndFeelClassName());
         } catch (ClassNotFoundException | InstantiationException | IllegalAccessException | UnsupportedLookAndFeelException e) {
@@ -164,6 +170,31 @@ public class Application extends JFrame {
         }
 
         Arrays.stream(args).filter(e -> e.startsWith("pw=")).findFirst().ifPresent(e -> {correctPassword = e.replace("pw=", "");});
+        Arrays.stream(args).filter(e -> e.startsWith("lang=")).findFirst().ifPresent(e -> {
+            switch (e.replace("lang=", "")) {
+                case "kr": {
+                    TITLE_LOCKED = "잠금";
+                    PASSWORD_ERROR_MESSAGE = "비밀번호 오류: (%d/%d 회 오류)";
+                    PASSWORD_LOCKED_MESSAGE = "입력 잠김 (1회 잠금 해제까지 %d 초 남음)";
+                    END_MESSAGE = "총 %d시간 %d분 %d초 동안 잠겨있었으며, 총 %d회의 실패한 잠금해제 시도가 있었습니다.";
+                    break;
+                }
+                default: {}
+            }
+        });
+
+        String sessionLockPrefix = "me.hysong.app.screenlock-";
+        tmpFile = File.createTempFile(sessionLockPrefix, ".sessionlock");
+        tmpFile.deleteOnExit();
+        File[] files = tmpFile.getParentFile().listFiles();
+        if (files != null) {
+            for (File file : files) {
+                if (file.getName().startsWith(sessionLockPrefix) && !file.getName().equals(tmpFile.getName())) {
+                    System.exit(0);
+                    return;
+                }
+            }
+        }
 
         SwingUtilities.invokeLater(Application::new);
     }
